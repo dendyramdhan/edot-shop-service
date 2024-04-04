@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-edot-shop-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-edot-shop
+spec:
+  selector:
+    matchLabels:
+      app: postgres-edot-shop
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres-edot-shop
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:13
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "user"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-edot-secret
+                  key: password
+            - name: POSTGRES_DB
+              value: "edot_shop_db"
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-storage
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-edot-shop-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-edot-shop
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+  selector:
+    app: postgres-edot-shop
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edot-shop-service
+spec:
+  selector:
+    matchLabels:
+      app: edot-shop-service
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: edot-shop-service
+    spec:
+      containers:
+        - name: edot-shop-service
+          image: dendyramdhan/edot-shop-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: "postgres-edot-shop"
+            - name: DB_USER
+              value: "user"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-edot-secret
+                  key: password
+            - name: DB_NAME
+              value: "edot_shop_db"
+            - name: DB_PORT
+              value: "5432"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edot-shop-service
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+  selector:
+    app: edot-shop-service
